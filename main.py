@@ -116,7 +116,7 @@ def starwars():
     #neutral cannot change other cells colours
     #neutral cannot count to neighbours
     #neutral can be converted 
-    total = red_neighbours + blue_neighbours
+    total = red_neighbours + blue_neighbours + neutral_neighbours
     new_grid = grid.copy()
 
     #refractory progression
@@ -139,9 +139,7 @@ def starwars():
         #conversion
     maj_red = red_neighbours > (total/2)
     maj_blue = blue_neighbours > (total/2)
-    maj_neutral = neutral_neighbours > (total/2)
-    stalemate = ((total > 0) & (red_neighbours == blue_neighbours))# & (blue_neighbours == neutral_neighbours) & (neutral_neighbours == red_neighbours))
-    
+    stalemate = ((total > 0) & (~maj_blue & ~maj_red))
     new_grid[survive & maj_blue] = BLUE
     new_grid[survive & maj_red] = RED
     new_grid[survive & stalemate] = NEUTRAL
@@ -222,11 +220,21 @@ pygame.init()
 screen = pygame.display.set_mode((COLS*CELL_SIZE, ROWS*CELL_SIZE))
 pygame.display.set_caption("Star Wars Cellular Automaton")
 clock = pygame.time.Clock()
+fullscreen = False
 
 while running == True:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_F11:
+                fullscreen = not fullscreen
+                if fullscreen:
+                    screen = pygame.display.set_mode((COLS*CELL_SIZE, ROWS*CELL_SIZE), pygame.FULLSCREEN)
+                else:
+                    screen = pygame.display.set_mode((COLS*CELL_SIZE, ROWS*CELL_SIZE))
+            if event.key == pygame.K_ESCAPE and fullscreen:
+                running = False 
         
     edge_spawners(blob_size=4, rate=2)
     starwars()
