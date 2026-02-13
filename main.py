@@ -5,10 +5,12 @@ import random
 CELL_SIZE = 5 #pixels
 
 running = True
+redtotal = 0
+bluetotal = 0
 
 #size (in cells)
-ROWS = 180
-COLS = 200
+ROWS = 150
+COLS = 280
 
 
 
@@ -71,11 +73,17 @@ def drawgrid():
             color = state_to_colour(state)
             pygame.draw.rect(screen, color, (c*CELL_SIZE, r*CELL_SIZE, CELL_SIZE, CELL_SIZE))
 
-def update():
+def starwars():
+    bluetemp = 0
+    redtemp = 0
     global grid, new_grid
     for row in range(1, rows-1):
         for col in range(1, cols-1):
             current = grid[row][col]
+            if current == RED:
+                redtemp += 1
+            elif current == BLUE:
+                bluetemp += 1
     #neutral cannot change other cells colours
     #neutral cannot count to neighbours
     #neutral can be converted 
@@ -126,7 +134,7 @@ def update():
 
             #birth logic
             elif current == 0:
-                if total == 2:
+                if total in (2,):
                     if bluec > total/2:
                         new_grid[row][col] = BLUE
                     elif redc > total/2:
@@ -134,6 +142,34 @@ def update():
                     else: new_grid[row][col] = NEUTRAL
                 else: new_grid[row][col] = current
     grid, new_grid = new_grid, grid
+    global redtotal, bluetotal
+    bluetotal = bluetemp
+    redtotal = redtemp
+
+
+def conway():
+    global grid, new_grid
+    for row in range(1, rows-1):
+        for col in range(1, cols-1):
+            current = grid[row][col]
+            nn = grid[row-1][col]
+            nw = grid[row-1][col-1]
+            ww = grid[row][col-1]
+            sw = grid[row+1][col-1]
+            ss = grid[row+1][col]
+            se = grid[row+1][col+1]
+            ee = grid[row][col+1]
+            ne = grid[row-1][col+1]
+            neighbours = [nn,nw,ww,sw,ss,se,ee,ne]
+            bluec = count(neighbours, BLUE)
+
+            if current == DEAD and (bluec == 3):
+                new_grid[row][col] = BLUE
+            elif current == BLUE and bluec not in (2,3):
+                new_grid[row][col] = DEAD
+            else: new_grid[row][col] = current
+    grid, new_grid = new_grid, grid
+
 
 
 
@@ -143,7 +179,7 @@ def edge_spawners(blob_size=5, rate=3):
     blob_size: max width/height of each blob
     rate: number of blobs per frame
     """
-    for _ in range(rate):
+    for _ in range((redtotal // 10000 + 1)):
         # --- Left edge (red blobs) ---
         r_start = random.randint(0, ROWS - blob_size)
         c_start = 0  # leftmost column
@@ -153,6 +189,7 @@ def edge_spawners(blob_size=5, rate=3):
             for c in range(c_start, min(c_start + width, COLS)):
                 grid[r][c] = RED
 
+    for _ in range((bluetotal // 10000 + 1)):
         # --- Right edge (blue blobs) ---
         r_start = random.randint(0, ROWS - blob_size)
         c_start = COLS - blob_size  # rightmost columns
@@ -178,8 +215,9 @@ while running == True:
         if event.type == pygame.QUIT:
             running = False
         
-    edge_spawners(blob_size=3, rate=4)
-    update()
+    edge_spawners(blob_size=4, rate=3)
+    #update_starwars()
+    starwars()
     drawgrid()
     pygame.display.flip()
-    clock.tick(60)
+    clock.tick(800)
