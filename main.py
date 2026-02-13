@@ -1,16 +1,17 @@
 import pygame
 import random
+import numpy
 
 #constants
-CELL_SIZE = 5 #pixels
+CELL_SIZE = 3 #pixels
 
 running = True
 redtotal = 0
 bluetotal = 0
 
 #size (in cells)
-ROWS = 150
-COLS = 280
+ROWS = 300
+COLS = 500
 
 
 
@@ -31,8 +32,8 @@ NEUTRAL = 7 #magenta
 NRF1 = 8
 NRF2 = 9
 
-grid = [[DEAD for _ in range(COLS)] for _ in range(ROWS)]
-new_grid = [[DEAD for _ in range(COLS)] for _ in range(ROWS)]
+grid = numpy.zeros((ROWS, COLS), dtype=numpy.uint8)
+new_grid = numpy.zeros((ROWS, COLS), dtype=numpy.uint8)
 
 rows = len(grid)
 cols = len(grid[0])
@@ -67,84 +68,96 @@ def count(list, num):
     return len(numlist)
 
 def drawgrid():
-    for r in range(ROWS):
-        for c in range(COLS):
-            state = grid[r][c]
-            color = state_to_colour(state)
-            pygame.draw.rect(screen, color, (c*CELL_SIZE, r*CELL_SIZE, CELL_SIZE, CELL_SIZE))
+    # Create an empty RGB array
+    rgb_array = numpy.zeros((ROWS, COLS, 3), dtype=numpy.uint8)
+
+    rgb_array[grid == RED] = [255, 0, 0]
+    rgb_array[grid == RRF1] = [255, 70, 70]
+    rgb_array[grid == RRF2] = [255, 140, 140]
+
+    rgb_array[grid == BLUE] = [0, 0, 255]
+    rgb_array[grid == BRF1] = [70, 70, 255]
+    rgb_array[grid == BRF2] = [140, 140, 255]
+
+    rgb_array[grid == NEUTRAL] = [255, 0, 255]
+    rgb_array[grid == NRF1] = [255, 70, 255]
+    rgb_array[grid == NRF2] = [255, 140, 255]
+
+    # Transpose to convert (ROWS, COLS, 3) to (COLS, ROWS, 3)
+    rgb_array = numpy.transpose(rgb_array, (1, 0, 2))
+    
+    # Scale the small RGB array to pixel size
+    surface = pygame.surfarray.make_surface(rgb_array)
+    surface = pygame.transform.scale(surface, (COLS*CELL_SIZE, ROWS*CELL_SIZE))
+    screen.blit(surface, (0, 0))
 
 def starwars():
-    bluetemp = 0
-    redtemp = 0
-    global grid, new_grid
-    for row in range(1, rows-1):
-        for col in range(1, cols-1):
-            current = grid[row][col]
-            if current == RED:
-                redtemp += 1
-            elif current == BLUE:
-                bluetemp += 1
+    global grid
+    red_mask = (grid == RED)
+    blue_mask = (grid == BLUE)
+    neutral_mask = (grid == NEUTRAL)
+
+    # Neighbor counting WITHOUT wrapping
+    def count_neighbors(mask):
+        padded = numpy.pad(mask, 1, mode='constant', constant_values=0)
+        neighbors = numpy.zeros_like(mask, dtype=int)
+        
+        for dr in [-1, 0, 1]:
+            for dc in [-1, 0, 1]:
+                if dr == 0 and dc == 0:
+                    continue
+                neighbors += padded[1+dr:1+dr+ROWS, 1+dc:1+dc+COLS]
+        
+        return neighbors
+
+    red_neighbours = count_neighbors(red_mask)
+    blue_neighbours = count_neighbors(blue_mask)
+    neutral_neighbours = count_neighbors(neutral_mask)
     #neutral cannot change other cells colours
     #neutral cannot count to neighbours
     #neutral can be converted 
-            nn = grid[row-1][col]
-            nw = grid[row-1][col-1]
-            ww = grid[row][col-1]
-            sw = grid[row+1][col-1]
-            ss = grid[row+1][col]
-            se = grid[row+1][col+1]
-            ee = grid[row][col+1]
-            ne = grid[row-1][col+1]
-            neighbours = [nn,nw,ww,sw,ss,se,ee,ne]
-            redc = count(neighbours, RED)
-            bluec = count(neighbours, BLUE)
-            neutralc = count(neighbours, NEUTRAL)
+    total = red_neighbours + blue_neighbours
+    new_grid = grid.copy()
 
-            total = redc+bluec
-
-            #refractory progression
-            if current in (RRF1, RRF2, BRF1, BRF2, NRF1, NRF2):
-                if current == RRF1:
-                    new_grid[row][col] = RRF2
-                elif current == BRF1:
-                    new_grid[row][col] = BRF2
-                elif current == NRF1:
-                    new_grid[row][col] = NRF2
-
-                elif current in (RRF2, BRF2, NRF2):
-                    new_grid[row][col] = 0
+    #refractory progression
+    new_grid[grid == RRF1] = RRF2
+    new_grid[grid == BRF1] = BRF2
+    new_grid[grid == NRF1] = NRF2
+    new_grid[grid == RRF2] = DEAD
+    new_grid[grid == BRF2] = DEAD
+    new_grid[grid == NRF2] = DEAD
 
             #death/refractory creation
-            elif current in (RED, BLUE, NEUTRAL):
-                if total not in (3,4,5):
-                    if current == RED:
-                        new_grid[row][col] = RRF1
-                    if current == BLUE:
-                        new_grid[row][col] = BRF1
-                    if current == NEUTRAL:
-                        new_grid[row][col] = NRF1
-            #conversion
-                else:
-                    if redc > total/2:
-                        new_grid[row][col] = RED
-                    elif bluec > total/2:
-                        new_grid[row][col] = BLUE
-                    else:
-                        new_grid[row][col] = NEUTRAL
+    alive = (grid == RED) | (grid == BLUE) | (grid == NEUTRAL)
+    survive = alive & ((total == 3) | (total == 4) | (total == 5))
+    die = alive & ~survive
+
+    new_grid[die & (grid ==RED)] = RRF1
+    new_grid[die & (grid ==BLUE)] = BRF1
+    new_grid[die & (grid ==NEUTRAL)] = NRF1
+
+        #conversion
+    maj_red = red_neighbours > (total/2)
+    maj_blue = blue_neighbours > (total/2)
+    maj_neutral = neutral_neighbours > (total/2)
+    stalemate = ((total > 0) & (red_neighbours == blue_neighbours))# & (blue_neighbours == neutral_neighbours) & (neutral_neighbours == red_neighbours))
+    
+    new_grid[survive & maj_blue] = BLUE
+    new_grid[survive & maj_red] = RED
+    new_grid[survive & stalemate] = NEUTRAL
+    #new_grid[survive & maj_neutral] = NEUTRAL
 
             #birth logic
-            elif current == 0:
-                if total in (2,):
-                    if bluec > total/2:
-                        new_grid[row][col] = BLUE
-                    elif redc > total/2:
-                        new_grid[row][col] = RED
-                    else: new_grid[row][col] = NEUTRAL
-                else: new_grid[row][col] = current
-    grid, new_grid = new_grid, grid
-    global redtotal, bluetotal
-    bluetotal = bluetemp
-    redtotal = redtemp
+    birth = (grid == DEAD) & ((total == 2))
+    new_grid[birth & maj_blue] = BLUE
+    new_grid[birth & maj_red] = RED
+    new_grid[birth & stalemate] = NEUTRAL
+    #new_grid[birth & maj_neutral] = NEUTRAL
+    grid[:, :] = new_grid
+    
+
+
+
 
 
 def conway():
@@ -179,7 +192,7 @@ def edge_spawners(blob_size=5, rate=3):
     blob_size: max width/height of each blob
     rate: number of blobs per frame
     """
-    for _ in range((redtotal // 10000 + 1)):
+    for _ in range((rate)):
         # --- Left edge (red blobs) ---
         r_start = random.randint(0, ROWS - blob_size)
         c_start = 0  # leftmost column
@@ -189,7 +202,7 @@ def edge_spawners(blob_size=5, rate=3):
             for c in range(c_start, min(c_start + width, COLS)):
                 grid[r][c] = RED
 
-    for _ in range((bluetotal // 10000 + 1)):
+    for _ in range((rate)):
         # --- Right edge (blue blobs) ---
         r_start = random.randint(0, ROWS - blob_size)
         c_start = COLS - blob_size  # rightmost columns
@@ -215,9 +228,8 @@ while running == True:
         if event.type == pygame.QUIT:
             running = False
         
-    edge_spawners(blob_size=4, rate=3)
-    #update_starwars()
+    edge_spawners(blob_size=4, rate=2)
     starwars()
     drawgrid()
     pygame.display.flip()
-    clock.tick(800)
+    clock.tick(20)
